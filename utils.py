@@ -9,7 +9,7 @@ load_dotenv()
 def get_LIBSVM(dataset_name: str):
     datasets_path = os.getenv("LIBSVM_DIR")
     trainX, trainY = load_svmlight_file(f"{datasets_path}/{dataset_name}")
-    return trainX.toarray(), trainY
+    return trainX, trainY
 
 def make_synthetic_binary_classification(n_samples: int, n_features: int, symmetric: bool = False, seed: int = 0):
     np.random.seed(seed)

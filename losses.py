@@ -1,23 +1,36 @@
 import torch
 import numpy as np
 
-class LogisticRegressionLoss(object):
+class BaseOracle(object):
     
-    def __init__(self, lmd: float = 0.0) -> None:
-       self.lmd = lmd
+    def func(self, x):
+        raise NotImplementedError
+    
+    def grad(self, x):
+        raise NotImplementedError
+    
+    def hess(self, x):
+        raise NotImplementedError
+
+class LogisticRegressionLoss(BaseOracle):
+    
+    def __init__(self, data, target, lmd: float = 0.0) -> None:
+        self.data = data
+        self.target = target
+        self.lmd = lmd
    
-    def func(self, data, target, x):
-        return np.mean(np.log(1 + np.exp( - data@x * target ))) + self.lmd/2 * np.linalg.norm(x)**2
+    def func(self, x):
+        return np.mean(np.log(1 + np.exp( - self.data@x * self.target ))) + self.lmd/2 * np.linalg.norm(x)**2
     
-    def grad(self, data, target, x) -> None:
-        r = np.exp( - data@x * target )
-        ry = -r/(1+r) * target
-        return (data.T @ ry )/data.shape[0]  + self.lmd * x
+    def grad(self, x) -> None:
+        r = np.exp( - self.data@x * self.target )
+        ry = -r/(1+r) * self.target
+        return (self.data.T @ ry )/self.data.shape[0]  + self.lmd * x
     
-    def hess(self, data, target, x):
-        r = np.exp( - data@x * target )
+    def hess(self, x):
+        r = np.exp( - self.data@x * self.target )
         rr= r/(1+r)**2
-        return (data.T@np.diagflat(rr)@data) / data.shape[0] + self.lmd*np.eye(data.shape[1])
+        return (self.data.T@np.diagflat(rr)@self.data) / self.data.shape[0] + self.lmd*np.eye(self.data.shape[1])
 
 # PyTorch Logistic Regression
 
