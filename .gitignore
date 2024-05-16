@@ -188,3 +188,4 @@ pyrightconfig.json
 
 output_*.txt
 .hostname
+plots/
