@@ -412,21 +412,20 @@ class ArmijoNewton(BaseOptimizer):
         n, exit_code = scipy.sparse.linalg.cg(hess, grad)
         d = -1.0 * n
         
-        for j in range(self.adaptive_search_max_iter + 1):
+        for j in range(1, self.adaptive_search_max_iter + 1):
             if j == self.adaptive_search_max_iter:
                 if self.verbose:
                     print(('Warning: adaptive_iterations_exceeded'), flush=True)
                 break
             
-            new_params = self.params + self.gamma**j * d
+            self.lr = self.gamma**j
+            new_params = self.params + self.lr * d
             new_loss = oracle.func(new_params)
             
-            if new_loss <= loss + self.gamma**j * self.tau * d.dot(grad):
+            if new_loss <= loss + self.lr * self.tau * d.dot(grad):
                 if self.verbose:
-                    print(f"Armijo backtracking took {j} steps: lr={self.gamma**j}")
+                    print(f"Armijo backtracking took {j} steps: lr={self.lr}")
                 break
-
-            self.lr = self.gamma**j
 
         # Update the parameters
         self.params -= self.lr * n

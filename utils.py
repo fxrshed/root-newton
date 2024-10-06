@@ -63,7 +63,7 @@ def map_classes_to(target, new_classes):
 
 def plotter(histories, labels, colors=None, linestyles=None, 
             linewidths=None, markers=None, f_star=None, suptitle=None, 
-            threshold=1e-10, tight_layout=True, filename=None):
+            threshold=1e-10, xlims=None, tight_layout=True, filename=None):
     
     fig, ax = plt.subplots(1, 2, figsize=(10, 4))
     if suptitle is not None:
@@ -89,24 +89,27 @@ def plotter(histories, labels, colors=None, linestyles=None,
         f_star = np.min([f_star for x in histories])
     
     for history, label, c, ls, lw, m in zip(histories, labels, colors, linestyles, linewidths, markers):
-        f_suboptim = history["loss"] - f_star
+        f_suboptim = (history["loss"] - f_star) / (history["loss"][0] - f_star)
         f_suboptim[f_suboptim < threshold] = 0.0
         
-        markevery = [x + np.random.randint(0, 3) for x in range(0, len(history["loss"]), len(history["loss"]) // 10)]
+        markevery = [x + np.random.randint(0, 1) for x in range(0, len(history["loss"]), len(history["loss"]) // 10)]
         
         ax[0].semilogy(f_suboptim, linestyle=ls, linewidth=lw, color=c, markevery=markevery, marker=m)
         ax[1].semilogy(history["time"], f_suboptim, linestyle=ls, linewidth=lw, color=c, label=label, markevery=markevery, marker=m)
 
     if f_star.sum() == 0.0:
-        ax[0].set_ylabel(r"$f(x_k)$")
-        ax[1].set_ylabel(r"$f(x_k)$")
+        ax[0].set_ylabel(r"$f(x_k)/f(x_0)$")
+        ax[1].set_ylabel(r"$f(x_k)/f(x_0)$")
     else:
-        ax[0].set_ylabel(r"$f(x_k) - f^*$")
-        ax[1].set_ylabel(r"$f(x_k) - f^*$")
+        ax[0].set_ylabel(r"$(f(x_k) - f^*)/(f(x_0) - f^*)$")
+        ax[1].set_ylabel(r"$(f(x_k) - f^*)/(f(x_0) - f^*)$")
         
         
     ax[0].set_xlabel("Steps")
     ax[1].set_xlabel("Time, sec")
+    
+    if xlims is not None:
+        ax[1].set_xlim(right=xlims[1])
 
     fig.legend()
     ax[0].grid()
