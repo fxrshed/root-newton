@@ -87,7 +87,7 @@ class PolytopeFeasibility(BaseOracle):
 
         """
         self.A = data
-        self.b = data
+        self.b = target
         self.p = p
         
         if self.p < 2:

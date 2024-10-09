@@ -483,3 +483,105 @@ class CGNewton(BaseOptimizer):
         self.params -= self.lr * n
             
         return self.params
+    
+class GreedyNewton(BaseOptimizer):
+    
+    def __init__(self, 
+                 params: np.ndarray, 
+                 lr_range: tuple[float, float] = (1e-5, 1.0, 100), 
+                 verbose: bool = False):
+        super().__init__(params)
+        self.verbose = verbose
+        
+        self.lrs = np.linspace(lr_range[0], lr_range[1], lr_range[2])
+        
+    def step(self, oracle: BaseOracle) -> np.ndarray:
+        """Performs single optimization step.
+
+        Args:
+            oracle (BaseOracle): oracle instance with first and second order information.
+
+        Returns:
+            np.ndarray:  model parameters after performing optimization step.
+        """
+        
+        loss = oracle.func(self.params)
+        grad = oracle.grad(self.params)
+        hess = oracle.hess(self.params)
+        
+        n = np.linalg.solve(hess, grad)
+        
+        best_lr = self.lrs[0]
+        min_loss = oracle.func(self.params - best_lr * n)
+        for lr in self.lrs[1:]:
+            new_loss = oracle.func(self.params - lr * n)
+            if new_loss < min_loss:
+                min_loss = new_loss
+                best_lr = lr
+        
+        self.lr = best_lr
+        
+        if self.verbose:
+            print(f"{best_lr=}, {min_loss=}")
+            
+        # Update the parameters
+        self.params -= self.lr * n
+
+        return self.params
+    
+
+class Line41(BaseOptimizer):
+    
+    def __init__(self, 
+                 params: np.ndarray, 
+                 lr_range: tuple[float, float] = (1e-5, 1.0, 100), 
+                 verbose: bool = False):
+        super().__init__(params)
+        self.verbose = verbose
+        
+        self.lrs = np.linspace(lr_range[0], lr_range[1], lr_range[2])
+        
+    def step(self, oracle: BaseOracle) -> np.ndarray:
+        """Performs single optimization step.
+
+        Args:
+            oracle (BaseOracle): oracle instance with first and second order information.
+
+        Returns:
+            np.ndarray:  model parameters after performing optimization step.
+        """
+        
+        loss = oracle.func(self.params)
+        grad = oracle.grad(self.params)
+        hess = oracle.hess(self.params)
+        
+        n = np.linalg.solve(hess, grad)
+        d = -1.0 * n
+        
+        best_lr = self.lrs[0]
+        
+        new_params = self.params + best_lr * d
+        new_grad = oracle.grad(new_params)
+        ny_norm = new_grad.dot(np.linalg.solve(hess, new_grad))
+        min_expr = (oracle.func(new_params) - oracle.func(self.params)) / ny_norm
+
+        for lr in self.lrs[1:]:
+
+            new_params = self.params + lr * d
+            new_grad = oracle.grad(new_params)
+            ny_norm = new_grad.dot(np.linalg.solve(hess, new_grad))
+            new_expr = (oracle.func(new_params) - oracle.func(self.params)) / ny_norm
+            
+            if new_expr < min_expr:
+                min_expr = new_expr.copy()
+                best_lr = lr
+        
+        self.lr = best_lr
+        
+        if self.verbose:
+            print(f"{best_lr=}, {min_expr=}")
+
+        # Update the parameters
+        self.params += self.lr * d
+
+        return self.params
