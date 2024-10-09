@@ -1,4 +1,4 @@
-# Improved Guarantees for Damped Newton Methods: \\Global Convergence Rate Up to  $\mathcal {O}\left(k^{-3} \right)$
+# Improved Guarantees for Damped Newton Methods: Global Convergence Rate Up to  $\mathcal {O}\left(k^{-3} \right)$
 
 ### Abstract
-This paper investigates the global convergence of stepsized Newton methods for convex functions with Holder continuous Hessians or third derivatives. We propose several simple stepsize schedules with fast global convergence guarantees, up to $\mathcal O\lr k^{-3} \rr$. For cases with multiple plausible smoothness parameterizations or an unknown smoothness constant, we introduce a stepsize backtracking procedure that ensures convergence as if the optimal smoothness parameters were known in advance.
+This paper investigates the global convergence of stepsized Newton methods for convex functions with Holder continuous Hessians or third derivatives. We propose several simple stepsize schedules with fast global convergence guarantees, up to $\mathcal O\left( k^{-3} \right)$. For cases with multiple plausible smoothness parameterizations or an unknown smoothness constant, we introduce a stepsize backtracking procedure that ensures convergence as if the optimal smoothness parameters were known in advance.
