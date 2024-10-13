@@ -90,7 +90,7 @@ def plotter(histories, labels, colors=None, linestyles=None,
     
     for history, label, c, ls, lw, m in zip(histories, labels, colors, linestyles, linewidths, markers):
         f_suboptim = (history["loss"] - f_star) / (history["loss"][0] - f_star)
-        f_suboptim[f_suboptim < threshold] = 0.0
+        # f_suboptim[f_suboptim < threshold] = 0.0
         
         markevery = [x + np.random.randint(0, 1) for x in range(0, len(history["loss"]), len(history["loss"]) // 10)]
         
@@ -108,8 +108,12 @@ def plotter(histories, labels, colors=None, linestyles=None,
     ax[0].set_xlabel("Steps")
     ax[1].set_xlabel("Time, sec")
     
+    ax[0].set_ylim(bottom=threshold, top=2.0)
+    ax[1].set_ylim(bottom=threshold, top=2.0)
+    
     if xlims is not None:
-        ax[1].set_xlim(right=xlims[1])
+        ax[0].set_xlim(left=xlims[0][0], right=xlims[0][1])
+        ax[1].set_xlim(left=xlims[1][0], right=xlims[1][1])
 
     fig.legend()
     ax[0].grid()
