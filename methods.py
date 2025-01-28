@@ -14,9 +14,23 @@ class BaseOptimizer(object):
     
     def step(self, oracle: BaseOracle):
         raise NotImplementedError
+    
+    
+def newton_search(hess: np.ndarray, grad: np.ndarray) -> np.ndarray:
+    """Returns Newton search direction calculation procedure to be used across all optimization methods.
+
+    Args:
+        hess (np.ndarray): Hessian matrix of the loss function
+        grad (np.ndarray): gradient vector of the loss function 
+
+    Returns:
+        np.ndarray: Newton search direction :math:`[\nabla^2 F(x)]^{-1} \nabla F(x)`.
+    """
+    hess_inv = np.linalg.pinv(hess, rcond=1e-10)
+    return hess_inv @ grad
 
 class GradRegNewton(BaseOptimizer):
-    def __init__(self, params: np.ndarray, q: float = 2.0, L_est: float = 1.0):
+    def __init__(self, params: np.ndarray, q: float = 2.0, L_est: float = 1.0, verbose: bool = False):
         r"""Implements Gradient Regularization of Newton method proposed in ``Super-Universal Regularized Newton Method``
 
         Args:
@@ -30,6 +44,7 @@ class GradRegNewton(BaseOptimizer):
         super().__init__(params)
         self.q = q
         self.L_est = L_est
+        self.verbose = verbose
         
         if self.q < 2 or self.q > 4:
             raise ValueError("Parameter `q` must me in range [2.0, 4.0].")
@@ -46,10 +61,13 @@ class GradRegNewton(BaseOptimizer):
     
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
-        
         B = np.eye(self.params.shape[0])
-        # n = np.linalg.solve(hess, grad)
-        n, exit_code = scipy.sparse.linalg.cg(hess, grad)
+        try:
+            n = newton_search(hess, grad)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            if self.verbose:
+                print(f'Warning: linalg_error: {e}', flush=True)
+            return self.params
         
         g = np.sqrt(grad.dot(n))
         lambda_k = (6 * self.L_est * g**(self.q - 2))**(1 / (self.q - 1))
@@ -58,7 +76,9 @@ class GradRegNewton(BaseOptimizer):
             delta_w = scipy.linalg.cho_solve(scipy.linalg.cho_factor(
                             hess + lambda_k * B, lower=False), -grad)
         except (np.linalg.LinAlgError, ValueError) as e:
-            print('Warning: linalg_error', flush=True)
+            if self.verbose:
+                print(f'Warning: linalg_error: {e}', flush=True)
+            return self.params
             
         self.params += delta_w
         
@@ -67,7 +87,7 @@ class GradRegNewton(BaseOptimizer):
     
 class AICN(BaseOptimizer):
     
-    def __init__(self, params: np.ndarray, L_est: float = 1.0):
+    def __init__(self, params: np.ndarray, L_est: float = 1.0, verbose: bool = False):
         r"""Implements  Affine-Invariant Cubic Newton (AICN) proposed in ``A Damped Newton Method Achieves Global O(1/k^2) and Local Quadratic Convergence Rate``.
 
         Args:
@@ -79,6 +99,7 @@ class AICN(BaseOptimizer):
         """
         super().__init__(params)
         self.L_est = L_est
+        self.verbose = verbose
         
     def step(self, oracle: BaseOracle) -> np.ndarray:
         """Performs single optimization step.
@@ -91,11 +112,14 @@ class AICN(BaseOptimizer):
         """
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
+        try:
+            n = newton_search(hess, grad)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            if self.verbose:
+                print(f'Warning: linalg_error: {e}', flush=True)
+            return self.params
         
-        # n = np.linalg.solve(hess, grad)
-        n, exit_code = scipy.sparse.linalg.cg(hess, grad)
-        
-        g = np.sqrt(grad.dot(n))
+        g = grad.dot(n) ** 0.5
         lr = (np.sqrt(1 + 2 * self.L_est * g) - 1) / (self.L_est * g)
         self.params -= lr * n
 
@@ -103,7 +127,7 @@ class AICN(BaseOptimizer):
     
 class RootNewton(BaseOptimizer):
     
-    def __init__(self, params: np.ndarray, q: float, L_est: float = 1.0):
+    def __init__(self, params: np.ndarray, q: float, L_est: float = 1.0, verbose: bool =False):
         r"""Implements Root Newton method proposed in ``Better global convergence guarantees for stepsized
 Newton method``
 
@@ -115,6 +139,7 @@ Newton method``
         super().__init__(params)
         self.q = q
         self.L_est = L_est
+        self.verbose = verbose
         
         if self.q < 2.0 or self.q > 4.0:
             raise ValueError("Parameter `q` must be in range [2.0, 4.0].")
@@ -134,9 +159,13 @@ Newton method``
         
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
-        
-        # n = np.linalg.solve(hess, grad)
-        n, exit_code = scipy.sparse.linalg.cg(hess, grad)
+        # n = newton_search(hess, grad)
+        try:
+            n = newton_search(hess, grad)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            if self.verbose:
+                print(f'Warning: linalg_error: {e}', flush=True)
+            return self.params
 
         g = np.sqrt(grad.dot(n))
         theta = (9 * self.L_est)**(1 / (self.q - 1)) * g**((self.q - 2) / (self.q - 1))
@@ -157,8 +186,13 @@ class SimpliReg(BaseOptimizer):
         
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
+        try:
+            n = newton_search(hess, grad)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            if self.verbose:
+                print(f'Warning: linalg_error: {e}', flush=True)
+            return self.params
         
-        n = np.linalg.solve(hess, grad)
         g = np.sqrt(grad.dot(n))
         theta = (self.sigma + 1) * g**self.beta
         lr = (1 / theta)**(1 / 1 + self.beta)
@@ -282,30 +316,30 @@ Newton Method``: https://arxiv.org/pdf/2208.05888
                     print(('Warning: adaptive_iterations_exceeded'), flush=True)
                 break
 
-            lambda_k = self.H_k * grad_norm ** self.alpha
+            lambda_k = (4 ** i) * self.H_k * (grad_norm ** self.alpha)
             try:
                 # Compute the regularized Newton step
-                delta_w = scipy.linalg.cho_solve(scipy.linalg.cho_factor(
-                                hess + lambda_k * self.B, lower=False), -grad)
+                # n = scipy.linalg.cho_solve(scipy.linalg.cho_factor(
+                #                 hess + lambda_k * self.B, lower=False), grad)
+                n = newton_search(hess + lambda_k * self.B, grad)
             except (np.linalg.LinAlgError, ValueError) as e:
                 if self.verbose:
                     print('Warning: linalg_error', flush=True)
 
-            loss_new = oracle.func(self.params + delta_w)
-            grad_new = oracle.grad(self.params + delta_w)
+            # loss_new = oracle.func(self.params - n)
+            grad_new = oracle.grad(self.params - n)
             grad_norm_new_sqrd = grad_new.dot(grad_new) # squared norm of gradient at (w + delta_w) 
 
             # Check condition for H_k
-            if grad_new.dot(-delta_w) >= grad_norm_new_sqrd / (4 * lambda_k):
-                self.H_k *= 0.25
-                self.H_k = max(self.H_k, self.H_min)
+            if grad_new.dot(n) >= grad_norm_new_sqrd / (4 * lambda_k):
+                # self.H_k *= 0.25
+                self.H_k = (4 ** i) * (self.H_k) * 0.25
+                # self.H_k = max(self.H_k, self.H_min)
                 break
             
-            self.H_k *= 4
-            
         # Update the point
-        self.params += delta_w
-            
+        self.params -= n
+        
         return self.params
 
 
@@ -353,9 +387,15 @@ Newton method``[1].
         
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
-        
-        n = np.linalg.solve(hess, grad)
-        g = np.sqrt(grad.dot(n))
+        # n = newton_search(hess, grad)
+        try:
+            n = newton_search(hess, grad)
+        except (np.linalg.LinAlgError, ValueError) as e:
+            if self.verbose:
+                print('Warning: linalg_error', flush=True)
+            return self.params
+                
+        g = grad.dot(n) ** 0.5
         
         for j in range(self.adaptive_search_max_iter + 1):
             if j == self.adaptive_search_max_iter:
@@ -365,13 +405,19 @@ Newton method``[1].
             
             theta = self.c**j * self.sigma_k * g**self.beta
             alpha = 1 / (1 + theta)
-            w_j = self.params - alpha * n
+            w = self.params - alpha * n
 
             # Check condition for H_k
-            grad_new = oracle.grad(w_j)
-            n_j = np.linalg.solve(hess, grad_new)
-            g_j_sq = grad_new.dot(n_j)
-            if grad_new.dot(n) >= g_j_sq / (2 * alpha * theta):
+            grad_j = oracle.grad(w)
+            
+            try:
+                n_j = newton_search(hess, grad_j)
+            except (np.linalg.LinAlgError, ValueError) as e:
+                if self.verbose:
+                    print('Warning: linalg_error', flush=True)
+                    
+            g_j_sq = grad_j.dot(n_j)
+            if grad_j.dot(n) * (2 * alpha * theta) >= g_j_sq :
                 self.sigma_k *= self.c**(j - 1)
                 if self.verbose:
                     print(f"Line search took {j} steps: lr={alpha}")
@@ -395,7 +441,7 @@ class ArmijoNewton(BaseOptimizer):
         self.adaptive_search_max_iter = 100
         
     def step(self, oracle: BaseOracle) -> np.ndarray:
-        """Performs single optimization step.
+        """Performs a single optimization step.
 
         Args:
             oracle (BaseOracle): oracle instance with first and second order information.
@@ -407,9 +453,7 @@ class ArmijoNewton(BaseOptimizer):
         loss = oracle.func(self.params)
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
-        
-        # n = np.linalg.solve(hess, grad)
-        n, exit_code = scipy.sparse.linalg.cg(hess, grad)
+        n = newton_search(hess, grad)
         d = -1.0 * n
         
         for j in range(1, self.adaptive_search_max_iter + 1):
@@ -428,7 +472,7 @@ class ArmijoNewton(BaseOptimizer):
                 break
 
         # Update the parameters
-        self.params -= self.lr * n
+        self.params += self.lr * d
 
         return self.params
     
@@ -451,13 +495,11 @@ class DampedNewton(BaseOptimizer):
         
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
-        n = np.linalg.solve(hess, grad)
+        n = newton_search(hess, grad)
         
         self.params -= self.lr * n
             
         return self.params
-    
-    
     
 class CGNewton(BaseOptimizer):
     
@@ -477,7 +519,6 @@ class CGNewton(BaseOptimizer):
         
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
-        # n = np.linalg.solve(hess, grad)
         n, exit_code = scipy.sparse.linalg.cg(hess, grad)
         
         self.params -= self.lr * n
@@ -488,12 +529,12 @@ class GreedyNewton(BaseOptimizer):
     
     def __init__(self, 
                  params: np.ndarray, 
-                 lr_range: tuple[float, float] = (1e-5, 1.0, 100), 
+                 lr_range: tuple[float, float] = (1e-10, 1.0, 400), 
                  verbose: bool = False):
         super().__init__(params)
         self.verbose = verbose
         
-        self.lrs = np.linspace(lr_range[0], lr_range[1], lr_range[2])
+        self.lrs = np.geomspace(lr_range[0], lr_range[1], lr_range[2])
         
     def step(self, oracle: BaseOracle) -> np.ndarray:
         """Performs single optimization step.
@@ -509,12 +550,13 @@ class GreedyNewton(BaseOptimizer):
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
         
-        n = np.linalg.solve(hess, grad)
+        n = newton_search(hess, grad)
+        d = -1.0 * n
         
-        best_lr = self.lrs[0]
-        min_loss = oracle.func(self.params - best_lr * n)
-        for lr in self.lrs[1:]:
-            new_loss = oracle.func(self.params - lr * n)
+        best_lr = 0.0
+        min_loss = oracle.func(self.params + best_lr * d)
+        for lr in self.lrs:
+            new_loss = oracle.func(self.params + lr * d)
             if new_loss < min_loss:
                 min_loss = new_loss
                 best_lr = lr
@@ -525,21 +567,21 @@ class GreedyNewton(BaseOptimizer):
             print(f"{best_lr=}, {min_loss=}")
             
         # Update the parameters
-        self.params -= self.lr * n
+        self.params += self.lr * d
 
         return self.params
     
 
-class Line41(BaseOptimizer):
+class GRLS(BaseOptimizer):
     
     def __init__(self, 
                  params: np.ndarray, 
-                 lr_range: tuple[float, float] = (1e-5, 1.0, 100), 
+                 lr_range: tuple[float, float] = (1e-10, 1.0, 400), 
                  verbose: bool = False):
         super().__init__(params)
         self.verbose = verbose
         
-        self.lrs = np.linspace(lr_range[0], lr_range[1], lr_range[2])
+        self.lrs = np.geomspace(lr_range[0], lr_range[1], lr_range[2])
         
     def step(self, oracle: BaseOracle) -> np.ndarray:
         """Performs single optimization step.
@@ -555,22 +597,25 @@ class Line41(BaseOptimizer):
         grad = oracle.grad(self.params)
         hess = oracle.hess(self.params)
         
-        n = np.linalg.solve(hess, grad)
-        d = -1.0 * n
+        # Not using `newton_search` method since we use `hess_inv` during linesearch
+        hess_inv = np.linalg.pinv(hess)
         
-        best_lr = self.lrs[0]
+        # Search direction
+        d = -1.0 * (hess_inv @ grad)
         
+        best_lr = 0.0
         new_params = self.params + best_lr * d
         new_grad = oracle.grad(new_params)
-        ny_norm = new_grad.dot(np.linalg.solve(hess, new_grad))
-        min_expr = (oracle.func(new_params) - oracle.func(self.params)) / ny_norm
-
-        for lr in self.lrs[1:]:
+        ny_norm_squared = new_grad @ (hess_inv @ new_grad)
+        min_expr = (oracle.func(new_params) - oracle.func(self.params)) / ny_norm_squared
+        
+        for lr in self.lrs:
 
             new_params = self.params + lr * d
             new_grad = oracle.grad(new_params)
-            ny_norm = new_grad.dot(np.linalg.solve(hess, new_grad))
-            new_expr = (oracle.func(new_params) - oracle.func(self.params)) / ny_norm
+            ny_norm_squared = new_grad @ (hess_inv @ new_grad)
+
+            new_expr = (oracle.func(new_params) - oracle.func(self.params)) / ny_norm_squared
             
             if new_expr < min_expr:
                 min_expr = new_expr.copy()
